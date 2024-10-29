@@ -1,7 +1,7 @@
 '''
 Auto_Stop_Policy
 {
-    "Version": "2012-10-17",
+    "Version": "2024-10-17",
     "Statement": [
         {
             "Sid": "EC2",
@@ -154,5 +154,5 @@ for region in regions:
             AutoScalingGroupName=str_target,
             MinSize=0,
             DesiredCapacity=0,
-            DefaultCooldown=30,
+            DefaultCooldown=35,
         )
