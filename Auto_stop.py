@@ -1,7 +1,7 @@
 '''
 Auto_Stop_Policy
 {
-    "Version": "2024-10-17",
+    "Version": "2024-10-30",
     "Statement": [
         {
             "Sid": "EC2",
