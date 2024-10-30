@@ -1,22 +1,37 @@
 name: SonarQube Analysis
 
 on:
-  push:
-    branches: [ main, develop ]
   pull_request:
-    branches: [ main, develop ]
+    branches: [ main,dev ]
+  push:
+    branches: [ main,dev ]
 
 jobs:
   sonarqube:
-    runs-on: self-hosted  # 또는 ubuntu-latest
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-      
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          GITHUB_REF_NAME: ${{ github.ref_name }}
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0  # 전체 히스토리 가져오기
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v3
+      with:
+        java-version: 17
+        distribution: 'adopt'
+
+    - name: Cache SonarQube packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.sonar/cache
+        key: ${{ runner.os }}-sonar
+        restore-keys: ${{ runner.os }}-sonar
+
+    - name: SonarQube Scan
+      uses: sonarsource/sonarqube-scan-action@master
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      with:
+        # 작업 디렉토리 확인
+        projectBaseDir: .
