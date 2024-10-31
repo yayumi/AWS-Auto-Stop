@@ -35,4 +35,4 @@ jobs:
         SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
       with:
         # 작업 디렉토리 확인.
-        #projectBaseDir: .
+        projectBaseDir: .
