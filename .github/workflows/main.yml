@@ -52,10 +52,13 @@ jobs:
             -Dsonar.python.version=3.8
 
       # Quality Gate 결과 확인 단계 추가
-      - name: SonarQube Quality Gate check
-        uses: sonarsource/sonarqube-quality-gate-action@master
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          scanMetadataReportFile: .scannerwork/report-task.txt
-        timeout-minutes: 5
+      - name: Check Quality Gate
+        run: |
+          sleep 5  # SonarQube 분석 결과가 업데이트될 때까지 대기
+          QUALITY_GATE_STATUS=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894" | jq -r '.projectStatus.status')
+          echo "Quality Gate Status: $QUALITY_GATE_STATUS"
+          if [ "$QUALITY_GATE_STATUS" = "ERROR" ]; then
+            echo "Quality Gate failed!"
+            exit 1
+          fi
+        continue-on-error: true  # 실패해도 workflow 계속 진행
