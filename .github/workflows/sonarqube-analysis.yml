@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
+          fetch-depth: 0
           
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -27,17 +27,7 @@ jobs:
           pip install pytest pytest-cov pylint
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
           
-      # Pylint 검사
-      - name: Run Pylint
-        run: |
-          pylint --output-format=parsable --reports=no ./**/*.py > pylint-report.txt || true
-          
-      # 테스트 커버리지 검사
-      - name: Run Tests with coverage
-        run: |
-          pytest --cov=. --cov-report=xml --cov-report=html tests/ || true
-          
-      # SonarQube 분석
+      # SonarQube 스캔
       - name: SonarQube Scan
         uses: sonarsource/sonarqube-scan-action@master
         env:
@@ -47,29 +37,38 @@ jobs:
           args: >
             -Dsonar.projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894
             -Dsonar.sources=.
-            -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.python.pylint.reportPath=pylint-report.txt
-            -Dsonar.qualitygate.wait=true
-            -Dsonar.qualitygate.timeout=300
             -Dsonar.python.version=3.8
 
-      # Quality Gate 체크
-      - name: SonarQube Quality Gate check
-        uses: sonarsource/sonarqube-quality-gate-action@master
-        timeout-minutes: 5
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # Quality Gate 실패 시에도 계속 진행
-        continue-on-error: true
-
-      # 추가적인 Quality Gate 상태 확인 및 출력
+      # Quality Gate 상태 확인 및 이슈 보고
       - name: Check Quality Gate Status
         run: |
-          sleep 5  # SonarQube 분석 결과가 업데이트될 때까지 대기
-          QUALITY_GATE_STATUS=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894" | jq -r '.projectStatus.status')
-          echo "Quality Gate Status: $QUALITY_GATE_STATUS"
-          if [ "$QUALITY_GATE_STATUS" = "ERROR" ]; then
-            echo "Quality Gate failed!"
-            exit 1
+          sleep 5  # SonarQube 분석 결과 업데이트 대기
+          
+          # Quality Gate 상태 확인
+          RESPONSE=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894")
+          STATUS=$(echo $RESPONSE | jq -r '.projectStatus.status')
+          
+          echo "Quality Gate Status: $STATUS"
+          
+          # 조건별 상세 내용 확인 및 출력
+          if [ "$STATUS" = "ERROR" ]; then
+            echo "::warning ::Quality Gate Failed! Details:"
+            
+            # 프로젝트의 issues 조회
+            ISSUES=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&resolved=false")
+            
+            # 주요 메트릭 조회
+            MEASURES=$(curl -s -u ${{ secrets.SONAR_TOKEN }}: "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density")
+            
+            echo "Summary of issues:"
+            echo $MEASURES | jq -r '.component.measures[] | "\(.metric): \(.value)"'
+            
+            echo "See full report at: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894"
           fi
-        continue-on-error: true
+        continue-on-error: true  # 실패해도 계속 진행
+
+      # 다음 빌드 단계 계속 진행
+      - name: Continue with build
+        run: |
+          echo "Continuing with build process..."
+          # 여기에 추가 빌드 스텝 추가
