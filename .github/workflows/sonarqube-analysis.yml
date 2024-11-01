@@ -44,12 +44,13 @@ jobs:
           # API 응답 대기 시간 증가
           sleep 20
           
-          # 결과 문자열 생성
-          REPORT_CONTENT="### SonarQube Analysis Results\n\n"
+          # 결과 파일 생성
+          echo "### SonarQube Analysis Results" > sonar-report.md
+          echo "" >> sonar-report.md
           
           # Quality Gate 상태 확인 및 출력
           QUALITY_GATE_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894")
-                 
+          
           # API 응답 디버깅
           echo "Debug - Quality Gate Response:"
           echo "$QUALITY_GATE_RESPONSE" | jq '.'
@@ -133,36 +134,17 @@ jobs:
           fi
           
           # GitHub 환경 변수에 저장
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # 임시 파일 생성
-            TEMP_FILE=$(mktemp)
-            echo "SONAR_REPORT<<EOF" > "$TEMP_FILE"
-            cat sonar-report.md >> "$TEMP_FILE"
-            echo "EOF" >> "$TEMP_FILE"
-            # 환경 파일에 추가
-            cat "$TEMP_FILE" >> $GITHUB_ENV
-            # 임시 파일 삭제
-            rm "$TEMP_FILE"
-          fi
-
-         # 결과를 환경 변수에 저장
-          echo "report_content=${REPORT_CONTENT}" >> $GITHUB_ENV
-
-        continue-on-error: true
-
-      # PR에 결과 코멘트 추가
-      - name: Create Comment from File
-        if: github.event_name == 'pull_request'
-        run: |
           echo 'COMMENT_BODY<<EOF' >> $GITHUB_ENV
           cat sonar-report.md >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
+        continue-on-error: true
 
-       - name: Add PR Comment
+      # PR에 결과 코멘트 추가
+      - name: Add PR Comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          message: ${{ env.report_content }}  # 직접 메시지 내용 전달
+          message: ${{ env.COMMENT_BODY }}
           header: sonarqube-report
           recreate: true
 
