@@ -40,68 +40,105 @@ jobs:
             -Dsonar.python.version=3.8
 
       # Quality Gate 상태 확인 및 PR에 결과 표시
-      - name: Check Quality Gate Status
-        id: sonarqube-quality-gate
+      - name: Check Quality Gate and Issues
+        id: sonarqube-check
         run: |
-          sleep 10  # SonarQube 분석 결과 업데이트 대기
+          # API 응답 대기 시간 증가
+          sleep 20
           
           echo "### SonarQube Analysis Results" > sonar-report.md
           echo "" >> sonar-report.md
           
-          # API 응답 확인
-          curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894" > response.json
+          # Quality Gate 상태 확인
+          QUALITY_GATE_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894")
           
-          if [ -s response.json ]; then
-            if jq -e . response.json > /dev/null 2>&1; then
-              STATUS=$(jq -r '.projectStatus.status // "UNKNOWN"' response.json)
-              
-              # 상태에 따른 이모지 설정
-              if [ "$STATUS" = "OK" ]; then
-                STATUS_EMOJI="✅"
-              elif [ "$STATUS" = "ERROR" ]; then
-                STATUS_EMOJI="❌"
-              else
-                STATUS_EMOJI="⚠️"
-              fi
-              
-              echo "#### Quality Gate Status: ${STATUS_EMOJI} ${STATUS}" >> sonar-report.md
-              echo "" >> sonar-report.md
-              
-              # 메트릭 정보 가져오기
-              curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,security_hotspots" > metrics.json
-              
-              if [ -s metrics.json ]; then
-                echo "#### Quality Metrics:" >> sonar-report.md
-                echo "" >> sonar-report.md
-                echo "| Metric | Value |" >> sonar-report.md
-                echo "|--------|-------|" >> sonar-report.md
-                
-                jq -r '.component.measures[] | select(.value != null) | "| \(.metric) | \(.value) |"' metrics.json >> sonar-report.md
-                
-                # 이슈 정보 가져오기
-                echo "" >> sonar-report.md
-                echo "#### Recent Issues:" >> sonar-report.md
-                echo "" >> sonar-report.md
-                
-                ISSUES=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&resolved=false&ps=5")
-                
-                if [ -s "$(echo $ISSUES)" ]; then
-                  echo "| Type | Message | File |" >> sonar-report.md
-                  echo "|------|---------|------|" >> sonar-report.md
-                  jq -r '.issues[] | "| \(.severity) | \(.message) | \(.component) |"' <<< "$ISSUES" >> sonar-report.md
-                fi
-              fi
-              
-              echo "" >> sonar-report.md
-              echo "🔍 [View detailed report](${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894)" >> sonar-report.md
+          if [ $? -eq 0 ]; then
+            # 메트릭 정보 가져오기
+            METRICS_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,security_hotspots,reliability_rating,security_rating,sqale_rating")
+            
+            # 이슈 정보 가져오기 (심각도별로 분리)
+            BLOCKERS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&severities=BLOCKER&resolved=false")
+            CRITICALS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&severities=CRITICAL&resolved=false")
+            MAJORS=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&severities=MAJOR&resolved=false")
+            
+            # Quality Gate 상태 표시
+            STATUS=$(echo $QUALITY_GATE_RESPONSE | jq -r '.projectStatus.status')
+            if [ "$STATUS" = "OK" ]; then
+              echo "#### Quality Gate Status: ✅ PASSED" >> sonar-report.md
             else
-              echo "⚠️ Error parsing SonarQube response" >> sonar-report.md
+              echo "#### Quality Gate Status: ❌ FAILED" >> sonar-report.md
             fi
+            echo "" >> sonar-report.md
+            
+            # 메트릭 정보 표시
+            echo "#### Quality Metrics" >> sonar-report.md
+            echo "| Metric | Value | Rating |" >> sonar-report.md
+            echo "|--------|-------|---------|" >> sonar-report.md
+            
+            # Reliability (Bugs)
+            BUGS=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "bugs").value')
+            RELIABILITY=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "reliability_rating").value')
+            echo "| Bugs | ${BUGS:-0} | ${RELIABILITY:-N/A} |" >> sonar-report.md
+            
+            # Security (Vulnerabilities)
+            VULNS=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "vulnerabilities").value')
+            SECURITY=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "security_rating").value')
+            echo "| Vulnerabilities | ${VULNS:-0} | ${SECURITY:-N/A} |" >> sonar-report.md
+            
+            # Maintainability (Code Smells)
+            CODE_SMELLS=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "code_smells").value')
+            MAINTAINABILITY=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "sqale_rating").value')
+            echo "| Code Smells | ${CODE_SMELLS:-0} | ${MAINTAINABILITY:-N/A} |" >> sonar-report.md
+            
+            # Coverage and Duplication
+            COVERAGE=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "coverage").value')
+            DUPLICATION=$(echo $METRICS_RESPONSE | jq -r '.component.measures[] | select(.metric == "duplicated_lines_density").value')
+            echo "| Coverage | ${COVERAGE:-0}% | - |" >> sonar-report.md
+            echo "| Duplication | ${DUPLICATION:-0}% | - |" >> sonar-report.md
+            
+            echo "" >> sonar-report.md
+            
+            # 이슈 상세 정보 표시
+            echo "#### Detailed Issues" >> sonar-report.md
+            echo "" >> sonar-report.md
+            
+            # Blocker Issues
+            BLOCKER_COUNT=$(echo $BLOCKERS | jq -r '.total')
+            if [ "$BLOCKER_COUNT" != "0" ]; then
+              echo "🚫 **Blocker Issues** (${BLOCKER_COUNT})" >> sonar-report.md
+              echo "| Rule | Message | File |" >> sonar-report.md
+              echo "|------|---------|------|" >> sonar-report.md
+              echo $BLOCKERS | jq -r '.issues[] | "| \(.rule) | \(.message) | \(.component) |"' >> sonar-report.md
+              echo "" >> sonar-report.md
+            fi
+            
+            # Critical Issues
+            CRITICAL_COUNT=$(echo $CRITICALS | jq -r '.total')
+            if [ "$CRITICAL_COUNT" != "0" ]; then
+              echo "❗ **Critical Issues** (${CRITICAL_COUNT})" >> sonar-report.md
+              echo "| Rule | Message | File |" >> sonar-report.md
+              echo "|------|---------|------|" >> sonar-report.md
+              echo $CRITICALS | jq -r '.issues[] | "| \(.rule) | \(.message) | \(.component) |"' >> sonar-report.md
+              echo "" >> sonar-report.md
+            fi
+            
+            # Major Issues
+            MAJOR_COUNT=$(echo $MAJORS | jq -r '.total')
+            if [ "$MAJOR_COUNT" != "0" ]; then
+              echo "⚠️ **Major Issues** (${MAJOR_COUNT})" >> sonar-report.md
+              echo "| Rule | Message | File |" >> sonar-report.md
+              echo "|------|---------|------|" >> sonar-report.md
+              echo $MAJORS | jq -r '.issues[] | "| \(.rule) | \(.message) | \(.component) |"' >> sonar-report.md
+              echo "" >> sonar-report.md
+            fi
+            
+            echo "---" >> sonar-report.md
+            echo "🔍 [View detailed report](${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894)" >> sonar-report.md
           else
-            echo "⚠️ No response from SonarQube API" >> sonar-report.md
+            echo "⚠️ Failed to fetch SonarQube analysis results" >> sonar-report.md
           fi
           
-          # PR 이벤트인 경우에만 코멘트 생성
+          # PR 이벤트인 경우에만 결과 저장
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "SONAR_REPORT<<EOF" >> $GITHUB_ENV
             cat sonar-report.md >> $GITHUB_ENV
@@ -117,8 +154,5 @@ jobs:
           header: sonarqube-report
           message: ${{ env.SONAR_REPORT }}
 
-      # 다음 빌드 단계 계속 진행
       - name: Continue with build
-        run: |
-          echo "Continuing with build process..."
-          # 여기에 추가 빌드 스텝 추가
+        run: echo "Continuing with build process..."
