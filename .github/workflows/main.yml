@@ -9,7 +9,9 @@ on:
 
 jobs:
   sonarqube:
+    name: SonarQube Scan
     runs-on: ubuntu-latest
+    
     steps:
     - uses: actions/checkout@v3
       with:
