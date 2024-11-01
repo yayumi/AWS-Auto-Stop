@@ -1,0 +1,83 @@
+name: SonarQube Analysis and Build
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonarqube:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pylint
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          
+      # SonarQube 스캔
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894
+            -Dsonar.sources=.
+            -Dsonar.python.version=3.8
+
+      # Quality Gate 상태 확인 및 이슈 보고 (수정된 버전)
+      - name: Check Quality Gate Status
+        run: |
+          sleep 10  # SonarQube 분석 결과 업데이트 대기 시간 증가
+          
+          # API 응답을 파일에 저장
+          curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894" > response.json
+          
+          if [ -s response.json ]; then
+            echo "API Response content:"
+            cat response.json
+            
+            if jq -e . response.json > /dev/null 2>&1; then
+              STATUS=$(jq -r '.projectStatus.status // "UNKNOWN"' response.json)
+              echo "Quality Gate Status: $STATUS"
+              
+              if [ "$STATUS" = "ERROR" ] || [ "$STATUS" = "WARN" ]; then
+                echo "::warning ::Quality Gate issues detected"
+                echo "See full report at: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894"
+                
+                # 메트릭 정보 가져오기
+                curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density" > metrics.json
+                
+                if [ -s metrics.json ]; then
+                  echo "Quality metrics:"
+                  jq -r '.component.measures[] | select(.value != null) | "\(.metric): \(.value)"' metrics.json || echo "No metrics data available"
+                fi
+              fi
+            else
+              echo "::warning ::Invalid JSON response from SonarQube API"
+            fi
+          else
+            echo "::warning ::Empty response from SonarQube API"
+          fi
+        continue-on-error: true
+
+      # 다음 빌드 단계 계속 진행
+      - name: Continue with build
+        run: |
+          echo "Continuing with build process..."
+          # 여기에 추가 빌드 스텝 추가
+    
