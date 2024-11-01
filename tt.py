@@ -8,6 +8,7 @@ def get_user_data(user_id, pwd):
         print("Connecting to database...")
         print("Connecting to database...")
         #print("Connecting to database...")
+
         
         # 보안 취약점: SQL Injection 가능성
         query = f"SELECT * FROM users WHERE id = {user_id} AND password = '{pwd}'"  # CRITICAL: SQL Injection 취약점
