@@ -1,3 +1,43 @@
+name: SonarQube Analysis and Build
+on:
+  pull_request:
+    branches: [ main, dev ]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  sonarqube:
+    name: Build and analyze
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest pytest-cov pylint
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          
+      # SonarQube 스캔
+      - name: SonarQube Scan
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894
+            -Dsonar.sources=.
+            -Dsonar.python.version=3.8
+
+
 # Quality Gate 상태 확인 및 PR에 결과 표시
 - name: Check Quality Gate and Issues
   id: sonarqube-check
