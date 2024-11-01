@@ -44,6 +44,7 @@ jobs:
           # API 응답 대기 시간 증가
           sleep 20
           
+          # 결과 파일 생성
           echo "### SonarQube Analysis Results" > sonar-report.md
           echo "" >> sonar-report.md
           
@@ -69,7 +70,7 @@ jobs:
             fi
             echo "" >> sonar-report.md
             
-            # 메트릭 데이터 가져오기
+            # 메트릭 데이터 가져오기1
             METRICS_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,security_hotspots,reliability_rating,security_rating,sqale_rating")
             
             if echo "$METRICS_RESPONSE" | jq -e . >/dev/null 2>&1; then
@@ -133,38 +134,19 @@ jobs:
           fi
           
           # GitHub 환경 변수에 저장
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            # 임시 파일 생성
-            TEMP_FILE=$(mktemp)
-            echo "SONAR_REPORT<<EOF" > "$TEMP_FILE"
-            cat sonar-report.md >> "$TEMP_FILE"
-            echo "EOF" >> "$TEMP_FILE"
-            # 환경 파일에 추가
-            cat "$TEMP_FILE" >> $GITHUB_ENV
-            # 임시 파일 삭제
-            rm "$TEMP_FILE"
-          fi
-
-           # 결과를 출력 변수로 설정
-          echo "report<<EOF" >> $GITHUB_ENV
-          cat sonar-report.md >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
-        continue-on-error: true
-
-      # PR에 결과 코멘트 추가
-      - name: Create Comment from File
-        if: github.event_name == 'pull_request'
-        run: |
           echo 'COMMENT_BODY<<EOF' >> $GITHUB_ENV
           cat sonar-report.md >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
+        continue-on-error: true
 
+      # PR에 결과 코멘트 추가
       - name: Add PR Comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           message: ${{ env.COMMENT_BODY }}
           header: sonarqube-report
+          recreate: true
 
       - name: Continue with build
         run: echo "Continuing with build process..."

@@ -51,7 +51,10 @@ import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-password = '45!1!2'
+#password = '45!1!2'
+db_pass='drr1'
+#print 'ss'
+print 'ss'
 
 def ec2_rds_stop(regions_list):
     #define the connection
