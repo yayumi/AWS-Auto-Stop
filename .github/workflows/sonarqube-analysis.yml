@@ -1,5 +1,7 @@
 name: SonarQube Analysis and Build
 on:
+  push:
+    branches: [ main, dev ]
   pull_request:
     branches: [ main, dev ]
     types: [opened, synchronize, reopened]
@@ -37,45 +39,86 @@ jobs:
             -Dsonar.sources=.
             -Dsonar.python.version=3.8
 
-      # Quality Gate 상태 확인 및 이슈 보고 (수정된 버전)
+      # Quality Gate 상태 확인 및 PR에 결과 표시
       - name: Check Quality Gate Status
+        id: sonarqube-quality-gate
         run: |
-          sleep 10  # SonarQube 분석 결과 업데이트 대기 시간 증가
+          sleep 10  # SonarQube 분석 결과 업데이트 대기
           
-          # API 응답을 파일에 저장
+          echo "### SonarQube Analysis Results" > sonar-report.md
+          echo "" >> sonar-report.md
+          
+          # API 응답 확인
           curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894" > response.json
           
           if [ -s response.json ]; then
-            echo "API Response content:"
-            cat response.json
-            
             if jq -e . response.json > /dev/null 2>&1; then
               STATUS=$(jq -r '.projectStatus.status // "UNKNOWN"' response.json)
-              echo "Quality Gate Status: $STATUS"
               
-              if [ "$STATUS" = "ERROR" ] || [ "$STATUS" = "WARN" ]; then
-                echo "::warning ::Quality Gate issues detected"
-                echo "See full report at: ${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894"
+              # 상태에 따른 이모지 설정
+              if [ "$STATUS" = "OK" ]; then
+                STATUS_EMOJI="✅"
+              elif [ "$STATUS" = "ERROR" ]; then
+                STATUS_EMOJI="❌"
+              else
+                STATUS_EMOJI="⚠️"
+              fi
+              
+              echo "#### Quality Gate Status: ${STATUS_EMOJI} ${STATUS}" >> sonar-report.md
+              echo "" >> sonar-report.md
+              
+              # 메트릭 정보 가져오기
+              curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,security_hotspots" > metrics.json
+              
+              if [ -s metrics.json ]; then
+                echo "#### Quality Metrics:" >> sonar-report.md
+                echo "" >> sonar-report.md
+                echo "| Metric | Value |" >> sonar-report.md
+                echo "|--------|-------|" >> sonar-report.md
                 
-                # 메트릭 정보 가져오기
-                curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density" > metrics.json
+                jq -r '.component.measures[] | select(.value != null) | "| \(.metric) | \(.value) |"' metrics.json >> sonar-report.md
                 
-                if [ -s metrics.json ]; then
-                  echo "Quality metrics:"
-                  jq -r '.component.measures[] | select(.value != null) | "\(.metric): \(.value)"' metrics.json || echo "No metrics data available"
+                # 이슈 정보 가져오기
+                echo "" >> sonar-report.md
+                echo "#### Recent Issues:" >> sonar-report.md
+                echo "" >> sonar-report.md
+                
+                ISSUES=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&resolved=false&ps=5")
+                
+                if [ -s "$(echo $ISSUES)" ]; then
+                  echo "| Type | Message | File |" >> sonar-report.md
+                  echo "|------|---------|------|" >> sonar-report.md
+                  jq -r '.issues[] | "| \(.severity) | \(.message) | \(.component) |"' <<< "$ISSUES" >> sonar-report.md
                 fi
               fi
+              
+              echo "" >> sonar-report.md
+              echo "🔍 [View detailed report](${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894)" >> sonar-report.md
             else
-              echo "::warning ::Invalid JSON response from SonarQube API"
+              echo "⚠️ Error parsing SonarQube response" >> sonar-report.md
             fi
           else
-            echo "::warning ::Empty response from SonarQube API"
+            echo "⚠️ No response from SonarQube API" >> sonar-report.md
+          fi
+          
+          # PR 이벤트인 경우에만 코멘트 생성
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "SONAR_REPORT<<EOF" >> $GITHUB_ENV
+            cat sonar-report.md >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
           fi
         continue-on-error: true
+
+      # PR에 결과 코멘트 추가
+      - name: Add PR Comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: sonarqube-report
+          message: ${{ env.SONAR_REPORT }}
 
       # 다음 빌드 단계 계속 진행
       - name: Continue with build
         run: |
           echo "Continuing with build process..."
           # 여기에 추가 빌드 스텝 추가
-    
