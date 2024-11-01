@@ -44,12 +44,12 @@ jobs:
           # API 응답 대기 시간 증가
           sleep 20
           
-          echo "### SonarQube Analysis Results" > sonar-report.md
-          echo "" >> sonar-report.md
+          # 결과 문자열 생성
+          REPORT_CONTENT="### SonarQube Analysis Results\n\n"
           
           # Quality Gate 상태 확인 및 출력
           QUALITY_GATE_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/qualitygates/project_status?projectKey=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894")
-          
+                 
           # API 응답 디버깅
           echo "Debug - Quality Gate Response:"
           echo "$QUALITY_GATE_RESPONSE" | jq '.'
@@ -145,10 +145,9 @@ jobs:
             rm "$TEMP_FILE"
           fi
 
-           # 결과를 출력 변수로 설정
-          echo "report<<EOF" >> $GITHUB_ENV
-          cat sonar-report.md >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+         # 결과를 환경 변수에 저장
+          echo "report_content=${REPORT_CONTENT}" >> $GITHUB_ENV
+
         continue-on-error: true
 
       # PR에 결과 코멘트 추가
@@ -159,12 +158,13 @@ jobs:
           cat sonar-report.md >> $GITHUB_ENV
           echo 'EOF' >> $GITHUB_ENV
 
-      - name: Add PR Comment
+       - name: Add PR Comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
-          message: ${{ env.COMMENT_BODY }}
+          message: ${{ env.report_content }}  # 직접 메시지 내용 전달
           header: sonarqube-report
+          recreate: true
 
       - name: Continue with build
         run: echo "Continuing with build process..."
