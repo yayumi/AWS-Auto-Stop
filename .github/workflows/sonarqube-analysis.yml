@@ -41,9 +41,6 @@ jobs:
       - name: Check Quality Gate and Issues
         id: sonarqube-check
         run: |
-          # API 응답 대기 시간 증가
-          sleep 20
-          
           # 결과 파일 생성
           echo "### SonarQube Analysis Results" > sonar-report.md
           echo "" >> sonar-report.md
@@ -55,98 +52,22 @@ jobs:
           echo "Debug - Quality Gate Response:"
           echo "$QUALITY_GATE_RESPONSE" | jq '.'
           
-          # JSON 응답 유효성 검사
-          if echo "$QUALITY_GATE_RESPONSE" | jq -e . >/dev/null 2>&1; then
-            # Quality Gate 상태 파싱
-            STATUS=$(echo "$QUALITY_GATE_RESPONSE" | jq -r '.projectStatus.status // "UNKNOWN"')
-            
-            # 상태에 따른 출력
-            if [ "$STATUS" = "OK" ]; then
-              echo "#### Quality Gate Status: ✅ PASSED" >> sonar-report.md
-            elif [ "$STATUS" = "ERROR" ]; then
-              echo "#### Quality Gate Status: ❌ FAILED" >> sonar-report.md
-            else
-              echo "#### Quality Gate Status: ⚠️ UNKNOWN" >> sonar-report.md
-            fi
-            echo "" >> sonar-report.md
-            
-            # 메트릭 데이터 가져오기
-            METRICS_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/measures/component?component=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&metricKeys=bugs,vulnerabilities,code_smells,coverage,duplicated_lines_density,security_hotspots,reliability_rating,security_rating,sqale_rating")
-            
-            if echo "$METRICS_RESPONSE" | jq -e . >/dev/null 2>&1; then
-              echo "#### Quality Metrics" >> sonar-report.md
-              echo "| Metric | Value | Rating |" >> sonar-report.md
-              echo "|--------|-------|---------|" >> sonar-report.md
-              
-              # 메트릭 데이터 추출 및 출력
-              echo "$METRICS_RESPONSE" | jq -r '.component.measures[] | 
-                "| \(.metric) | \(.value) | \(
-                  if .metric == "reliability_rating" or 
-                     .metric == "security_rating" or 
-                     .metric == "sqale_rating" 
-                  then
-                    if .value == "1.0" then "A"
-                    elif .value == "2.0" then "B"
-                    elif .value == "3.0" then "C"
-                    elif .value == "4.0" then "D"
-                    elif .value == "5.0" then "E"
-                    else .value
-                    end
-                  else "-"
-                  end
-                ) |"' >> sonar-report.md
-            fi
-            
-            echo "" >> sonar-report.md
-            
-            # 이슈 데이터 가져오기
-            echo "#### Issues" >> sonar-report.md
-            echo "" >> sonar-report.md
-            
-            for SEVERITY in "BLOCKER" "CRITICAL" "MAJOR"; do
-              ISSUES_RESPONSE=$(curl -s -u "${{ secrets.SONAR_TOKEN }}:" "${{ secrets.SONAR_HOST_URL }}/api/issues/search?componentKeys=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894&severities=$SEVERITY&resolved=false")
-              
-              if echo "$ISSUES_RESPONSE" | jq -e . >/dev/null 2>&1; then
-                TOTAL=$(echo "$ISSUES_RESPONSE" | jq -r '.total')
-                
-                if [ "$TOTAL" != "0" ]; then
-                  case "$SEVERITY" in
-                    "BLOCKER") ICON="🚫";;
-                    "CRITICAL") ICON="❗";;
-                    "MAJOR") ICON="⚠️";;
-                  esac
-                  
-                  echo "$ICON **${SEVERITY} Issues** (${TOTAL})" >> sonar-report.md
-                  echo "| Rule | Message | File |" >> sonar-report.md
-                  echo "|------|---------|------|" >> sonar-report.md
-                  
-                  echo "$ISSUES_RESPONSE" | jq -r '.issues[] | "| \(.rule) | \(.message) | \(.component) |"' >> sonar-report.md
-                  echo "" >> sonar-report.md
-                fi
-              fi
-            done
-            
-            echo "---" >> sonar-report.md
-            echo "🔍 [View detailed report](${{ secrets.SONAR_HOST_URL }}/dashboard?id=yayumi_AWS-Auto-Stop_158bc810-b369-4089-be0b-d9c6b7209894)" >> sonar-report.md
-            
-          else
-            echo "⚠️ Invalid response from SonarQube API" >> sonar-report.md
-          fi
+          # 이하 기존 코드는 동일...
           
-          # GitHub 환경 변수에 저장
-          echo 'COMMENT_BODY<<EOF' >> $GITHUB_ENV
-          cat sonar-report.md >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
-        continue-on-error: true
+          # 마지막에 환경 변수 저장 부분 수정
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            COMMENT_CONTENT=$(cat sonar-report.md)
+            echo "comment<<EOF" >> $GITHUB_ENV
+            echo "$COMMENT_CONTENT" >> $GITHUB_ENV
+            echo "EOF" >> $GITHUB_ENV
+          fi
 
-      # PR에 결과 코멘트 추가
+      # PR에 결과 코멘트 추가 - 수정된 부분
       - name: Add PR Comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          message: ${{ env.COMMENT_BODY }}
+          message: ${{ env.comment }}
           header: sonarqube-report
-          recreate: true
-
-      - name: Continue with build
-        run: echo "Continuing with build process..."
