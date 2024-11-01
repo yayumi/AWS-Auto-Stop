@@ -136,9 +136,15 @@ jobs:
           
           # GitHub 환경 변수에 저장
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "SONAR_REPORT<<EOF" >> $GITHUB_ENV
-            cat sonar-report.md >> $GITHUB_ENV
-            echo "EOF" >> $GITHUB_ENV
+            # 임시 파일 생성
+            TEMP_FILE=$(mktemp)
+            echo "SONAR_REPORT<<EOF" > "$TEMP_FILE"
+            cat sonar-report.md >> "$TEMP_FILE"
+            echo "EOF" >> "$TEMP_FILE"
+            # 환경 파일에 추가
+            cat "$TEMP_FILE" >> $GITHUB_ENV
+            # 임시 파일 삭제
+            rm "$TEMP_FILE"
           fi
         continue-on-error: true
 
@@ -149,6 +155,11 @@ jobs:
         with:
           header: sonarqube-report
           message: ${{ env.SONAR_REPORT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          append: false
+          recreate: true
+          hide_and_recreate: true
+          hide_classify: OUTDATED
 
       - name: Continue with build
         run: echo "Continuing with build process..."
