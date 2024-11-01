@@ -146,6 +146,11 @@ jobs:
             # 임시 파일 삭제
             rm "$TEMP_FILE"
           fi
+
+           # 결과를 출력 변수로 설정
+          echo "report<<EOF" >> $GITHUB_ENV
+          cat sonar-report.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
         continue-on-error: true
 
       # PR에 결과 코멘트 추가
@@ -154,12 +159,8 @@ jobs:
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: sonarqube-report
-          message: ${{ env.SONAR_REPORT }}
+          message: ${{ env.report }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          append: false
-          recreate: true
-          hide_and_recreate: true
-          hide_classify: OUTDATED
 
       - name: Continue with build
         run: echo "Continuing with build process..."
