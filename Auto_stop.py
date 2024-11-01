@@ -1,7 +1,7 @@
 '''
 Auto_Stop_Policy
 {
-    "Version": "2012-10-17",
+    "Version": "2024-10-30",  
     "Statement": [
         {
             "Sid": "EC2",
@@ -50,6 +50,8 @@ import logging
 #setup simple logging for INFO
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
+
+password = '45!1!2'
 
 def ec2_rds_stop(regions_list):
     #define the connection
