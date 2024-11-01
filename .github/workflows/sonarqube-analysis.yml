@@ -1,7 +1,5 @@
 name: SonarQube Analysis and Build
 on:
-  push:
-    branches: [ main, dev ]
   pull_request:
     branches: [ main, dev ]
     types: [opened, synchronize, reopened]
@@ -146,20 +144,27 @@ jobs:
             # 임시 파일 삭제
             rm "$TEMP_FILE"
           fi
+
+           # 결과를 출력 변수로 설정
+          echo "report<<EOF" >> $GITHUB_ENV
+          cat sonar-report.md >> $GITHUB_ENV
+          echo "EOF" >> $GITHUB_ENV
         continue-on-error: true
 
       # PR에 결과 코멘트 추가
+      - name: Create Comment from File
+        if: github.event_name == 'pull_request'
+        run: |
+          echo 'COMMENT_BODY<<EOF' >> $GITHUB_ENV
+          cat sonar-report.md >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
       - name: Add PR Comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
+          message: ${{ env.COMMENT_BODY }}
           header: sonarqube-report
-          message: ${{ env.SONAR_REPORT }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          append: false
-          recreate: true
-          hide_and_recreate: true
-          hide_classify: OUTDATED
 
       - name: Continue with build
         run: echo "Continuing with build process..."

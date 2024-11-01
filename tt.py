@@ -5,7 +5,7 @@ def get_user_data(user_id, pwd):
     
     try:
         # Code Smell: 중복된 문자열
-        #print("Connecting to database...")
+        print("Connecting to database...")
         #print("Connecting to database...")
         #print("Connecting to database...")
 
