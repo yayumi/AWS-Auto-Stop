@@ -152,13 +152,19 @@ jobs:
         continue-on-error: true
 
       # PR에 결과 코멘트 추가
+      - name: Create Comment from File
+        if: github.event_name == 'pull_request'
+        run: |
+          echo 'COMMENT_BODY<<EOF' >> $GITHUB_ENV
+          cat sonar-report.md >> $GITHUB_ENV
+          echo 'EOF' >> $GITHUB_ENV
+
       - name: Add PR Comment
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
+          message: ${{ env.COMMENT_BODY }}
           header: sonarqube-report
-          message: ${{ env.report }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Continue with build
         run: echo "Continuing with build process..."
