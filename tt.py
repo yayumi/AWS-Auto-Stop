@@ -1,4 +1,4 @@
-# 안좋은 코드 예시: 데이터베이스 연결 및 쿼리 실행 함수!!
+# 안좋은 코드 예시: 데이터베이스 연결 및 쿼리 실행 함수!
 def get_user_data(user_id, pwd):
     # 보안 취약점: 하드코딩된 인증 정보
     DB_PASSWORD = "admin123"  # CRITICAL: 하드코딩된 비밀번호
