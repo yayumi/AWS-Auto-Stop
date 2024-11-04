@@ -2,6 +2,7 @@ name: Python PR SonarQube Analysis
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+
 jobs:
   analysis:
     name: SonarQube Analysis
@@ -38,8 +39,10 @@ jobs:
             -Dsonar.sources=.
             -Dsonar.tests=tests
             -Dsonar.python.version=3
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }}
+            -Dsonar.pullrequest.branch=${{ github.head_ref }}
+            -Dsonar.pullrequest.base=${{ github.base_ref }}
             -Dsonar.scm.provider=git
-            -Dsonar.branch.name=${{ github.head_ref }}
 
       - name: SonarQube Quality Gate Check
         uses: sonarsource/sonarqube-quality-gate-action@master
