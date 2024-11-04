@@ -43,8 +43,8 @@ jobs:
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
             -Dsonar.scm.provider=git
-            -Dsonar.branch.name=
-            -Dsonar.branch.target=
+            -Dsonar.branch.name=${{ github.head_ref }}
+            -Dsonar.branch.target=${{ github.base_ref }}
 
       - name: SonarQube Quality Gate Check
         uses: sonarsource/sonarqube-quality-gate-action@master
