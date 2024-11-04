@@ -50,4 +50,7 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_CUSTOM_SERVER_URL: ${{ secrets.SONAR_HOST_URL }}  # 추가된 라인
+        with:
+          scanMetadataReportFile: .scannerwork/report-task.txt  # 추가된 라인
         continue-on-error: true
