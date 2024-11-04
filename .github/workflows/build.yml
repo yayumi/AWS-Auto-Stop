@@ -43,14 +43,16 @@ jobs:
             -Dsonar.pullrequest.branch=${{ github.head_ref }}
             -Dsonar.pullrequest.base=${{ github.base_ref }}
             -Dsonar.scm.provider=git
-
+            -Dsonar.serverUrl=${{ secrets.SONAR_HOST_URL }}
+            -Dsonar.baseUrl=${{ secrets.SONAR_HOST_URL }}
+      
       - name: SonarQube Quality Gate Check
         uses: sonarsource/sonarqube-quality-gate-action@master
         timeout-minutes: 5
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-          SONAR_CUSTOM_SERVER_URL: ${{ secrets.SONAR_HOST_URL }}  # 추가된 라인
+          SONAR_SERVER_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
-          scanMetadataReportFile: .scannerwork/report-task.txt  # 추가된 라인
+          scanMetadataReportFile: .scannerwork/report-task.txt
         continue-on-error: true
